@@ -1,0 +1,208 @@
+(require plot)
+(plot-new-window? #t)
+
+(struct action (event result) #:transparent)
+; a transition rule
+(struct state (name actions) #:transparent)
+; a state with label and many transition rules
+(struct automaton (current-state states) #:transparent)
+; the machine itself
+
+; A reaction determines the next state from an event and a list of actions
+; in a state
+(define (this-action? an-event an-action)
+  (equal? an-event
+          (action-event an-action)))
+(define (filter-action an-event actions)
+  (filter
+   (lambda (an-action)
+     (this-action? an-event an-action))
+   actions))
+(define (react-helper an-event actions)
+  (let ([result (filter-action an-event actions)])
+    (if (null? result)
+        null
+        (action-result (car result)))))
+(define (this-state? a-name a-state)
+  (equal? a-name
+          (state-name a-state)))
+(define (filter-state a-name states)
+  (filter
+   (lambda (a-state)
+     (this-state? a-name a-state))
+   states))
+(define (react an-event an-auto)
+  (let ([result-state (filter-state (automaton-current-state an-auto)
+                                    (automaton-states an-auto))])
+    (if (null? result-state)
+        an-auto
+        (react-helper an-event
+                      (state-actions
+                       (car result-state))))))
+(define (update-current-state old-auto new-state)
+  (struct-copy automaton old-auto [current-state new-state]))
+
+(define accommodator
+  (automaton 1
+             (list (state 0 (list (action 0 2)
+                                  (action 1 1)
+                                  (action 2 0)))
+                   (state 1 (list (action 0 2)
+                                  (action 1 1)
+                                  (action 2 0)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 1)
+                                  (action 2 0))))))
+(define all-highs
+  (automaton 2
+             (list (state 0 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 1 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2))))))
+
+(define (generate-auto)
+  (automaton (random 3)
+             (list (state 0 (list (action 0 (random 3))
+                                  (action 1 (random 3))
+                                  (action 2 (random 3))))
+                   (state 1 (list (action 0 (random 3))
+                                  (action 1 (random 3))
+                                  (action 2 (random 3))))
+                   (state 2 (list (action 0 (random 3))
+                                  (action 1 (random 3))
+                                  (action 2 (random 3)))))))
+
+(define (match-claims claims)
+  (if (<= (apply + claims) 2)
+      (map convert-payoff claims)
+      (list 0 0)))
+
+(define (convert-payoff x)
+  (cond [(= x -1) 0]
+        [(= x 0) 2]
+        [(= x 1) 5]
+        [(= x 2) 8]))
+
+(define (match-pair* auto1 auto2 results previous-claims countdown)
+  (if (zero? countdown)
+      results
+      (match-pair* (update-current-state auto1
+                                         (react (last previous-claims) auto1))
+                   (update-current-state auto2
+                                         (react (car previous-claims) auto2))
+                   (append results (list
+                                    (match-claims previous-claims)))
+                   (list (react (last previous-claims) auto1)
+                         (react (car  previous-claims) auto2))
+                   (sub1 countdown))))
+
+;; match a pair of automaton for n rounds
+;; return a list of round results
+(define (match-pair automaton-pair rounds-per-match)
+  (match-pair* (car automaton-pair)
+               (last automaton-pair)
+               '()
+               (map automaton-current-state automaton-pair)
+               rounds-per-match))
+
+;; generate population
+
+(define A
+  (for/list
+      ([n 100])
+    (generate-auto)))
+
+
+
+;; in each match, take mean of round results for each automaton
+;; returns a pair of means
+(define (take-sums round-results)
+  (map (lambda (f) (apply +  (map f round-results)))
+       (list first second)))
+
+(define (take-discounts delta round-results)
+  (map (lambda (f)
+         (sum
+          (for/list ([i (length round-results)])
+            (* (list-ref (map f round-results) i)
+               (expt delta i)))))
+       (list first second)))
+
+(define (match-population population rounds-per-match)
+  (for/list ([i (/ (length population)
+                   2)])
+    (take-sums
+     (match-pair (list
+                  (list-ref population (* 2 i))
+                  (list-ref population (add1 (* 2 i))))
+                 rounds-per-match))))
+
+
+(define (reductions-h f accumulated init a-list)
+  (if (null? a-list)
+      accumulated
+      (let ((next-init (f init (first a-list))))
+        (reductions-h f
+                      (append accumulated (list next-init))
+                      next-init
+                      (rest a-list)))))
+(define (reductions f init a-list)
+  (if (null? a-list)
+      accumulated
+      (reductions-h f '() init a-list)))
+(define (reductions* f a-list)
+  (let ([init (first a-list)])
+    (reductions-h f (list init) init (rest a-list))))
+
+(define (accumulate a-list)
+  (reductions* + (cons 0 a-list)))
+
+(define (payoff-percentages payoff-list)
+  (let ([s (apply + payoff-list)])
+    (for/list ([i (length payoff-list)])
+      (/ (list-ref payoff-list i)
+         s))))
+
+(define (accumulated-fitness population rounds-per-match)
+  (accumulate
+   (payoff-percentages
+    (flatten
+     (match-population population rounds-per-match)))))
+
+
+(define (randomise-over-fitness accumulated-payoff-percentage population speed)
+  (let
+      ([len (length population)])
+    (for/list
+        ([n speed])
+      (let ([r (random)])
+        (for/and ([i len])
+          #:break (< r (list-ref accumulated-payoff-percentage i))
+          (list-ref population i))))))
+(define population-mean '())
+(define (evolve population cycles speed rounds-per-match)
+  (let* ([round-results (match-population population rounds-per-match)]
+         [average-payoff (exact->inexact (/ (apply + (flatten round-results))
+                                            (* rounds-per-match 100)))]
+         [accum-fitness (accumulate (payoff-percentages (flatten round-results)))]
+         [survivors (drop population speed)]
+         [successors
+          (randomise-over-fitness accum-fitness population speed)]
+         [new-population (shuffle (append survivors successors))])
+    (set! population-mean
+          (append population-mean (list average-payoff)))
+    (if (zero? cycles)
+        "done"
+        (evolve new-population (sub1 cycles) speed rounds-per-match))))
+
+;; TV
+(define (plot-mean data)
+  (let* ([l (length data)]
+         [coors (map list (build-list l values)
+                     data)])
+    (plot (lines coors))))
