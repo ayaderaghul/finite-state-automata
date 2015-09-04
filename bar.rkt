@@ -46,7 +46,7 @@
         (action-result an-event
                       (state-actions
                        (car result-state))))))
-; update the current state of the old auto
+; update the state of the auto (new auto created)
 (define (update-current-state old-auto new-state)
   (struct-copy automaton old-auto [current-state new-state]))
 
@@ -72,7 +72,8 @@
                    (state 2 (list (action 0 2)
                                   (action 1 2)
                                   (action 2 2))))))
-
+; generate random automaton (random current state, random result-state
+; after each event
 (define (generate-auto)
   (automaton (random 3)
              (list (state 0 (list (action 0 (random 3))
@@ -119,12 +120,10 @@
                rounds-per-match))
 
 ;; generate population
-
 (define A
   (for/list
       ([n 100])
     (generate-auto)))
-
 
 
 ;; in each match, take mean of round results for each automaton
@@ -150,7 +149,7 @@
                   (list-ref population (add1 (* 2 i))))
                  rounds-per-match))))
 
-
+;; from the matching result, calculate the fitness
 (define (reductions-h f accumulated init a-list)
   (if (null? a-list)
       accumulated
@@ -182,7 +181,7 @@
     (flatten
      (match-population population rounds-per-match)))))
 
-
+;; generate new automaton by randomising over the fitness vector
 (define (randomise-over-fitness accumulated-payoff-percentage population speed)
   (let
       ([len (length population)])
@@ -192,7 +191,9 @@
         (for/and ([i len])
           #:break (< r (list-ref accumulated-payoff-percentage i))
           (list-ref population i))))))
+
 (define population-mean '())
+;; evolve the population over cycles
 (define (evolve population cycles speed rounds-per-match)
   (let* ([round-results (match-population population rounds-per-match)]
          [average-payoff (exact->inexact (/ (apply + (flatten round-results))
