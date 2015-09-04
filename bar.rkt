@@ -2,11 +2,11 @@
 (plot-new-window? #t)
 
 ;; AUTOMATON
-(struct action (event result) #:transparent)
+(struct action (event result) #:transparent #:mutable)
 ; a transition rule: an event and the result state
-(struct state (name actions) #:transparent)
+(struct state (name actions) #:transparent #:mutable)
 ; a state: name and many transition rules
-(struct automaton (current-state states) #:transparent)
+(struct automaton (current-state states) #:transparent #:mutable)
 ; the machine itself: current state + states
 
 ;; when an event happens, the right action needs to be chosen
@@ -21,7 +21,7 @@
    actions))
 ; after the right action has been chosen,
 ; extract the result of that action
-(define (action-result an-event actions)
+(define (act an-event actions)
   (let ([result (filter-action an-event actions)])
     (if (null? result)
         null
@@ -43,12 +43,12 @@
                                     (automaton-states an-auto))])
     (if (null? result-state)
         an-auto
-        (action-result an-event
-                      (state-actions
-                       (car result-state))))))
+        (act an-event
+             (state-actions
+              (car result-state))))))
 ; update the state of the auto (new auto created)
-(define (update-current-state old-auto new-state)
-  (struct-copy automaton old-auto [current-state new-state]))
+(define (update old-auto new-state)
+  (set-automaton-current-state! old-auto new-state))
 
 (define accommodator
   (automaton 1
@@ -100,15 +100,14 @@
 (define (match-pair* auto1 auto2 results previous-claims countdown)
   (if (zero? countdown)
       results
-      (match-pair* (update-current-state auto1
-                                         (react (last previous-claims) auto1))
-                   (update-current-state auto2
-                                         (react (car previous-claims) auto2))
-                   (append results (list
-                                    (match-claims previous-claims)))
-                   (list (react (last previous-claims) auto1)
-                         (react (car  previous-claims) auto2))
-                   (sub1 countdown))))
+      (let ([reaction1 (react (last previous-claims) auto1)]
+            [reaction2 (react (car previous-claims) auto2)])
+        (match-pair* (begin (update auto1 reaction1) auto1)
+                     (begin (update auto2 reaction2) auto2)
+                     (append results (list
+                                      (match-claims previous-claims)))
+                     (list reaction1 reaction2)
+                     (sub1 countdown)))))
 
 ;; match a pair of automaton for n rounds
 ;; return a list of round results
