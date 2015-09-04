@@ -1,44 +1,52 @@
 (require plot)
 (plot-new-window? #t)
 
+;; AUTOMATON
 (struct action (event result) #:transparent)
-; a transition rule
+; a transition rule: an event and the result state
 (struct state (name actions) #:transparent)
-; a state with label and many transition rules
+; a state: name and many transition rules
 (struct automaton (current-state states) #:transparent)
-; the machine itself
+; the machine itself: current state + states
 
-; A reaction determines the next state from an event and a list of actions
-; in a state
+;; when an event happens, the right action needs to be chosen
 (define (this-action? an-event an-action)
-  (equal? an-event
-          (action-event an-action)))
+  (equal? an-event (action-event an-action)))
+; in a state, there are many actions, filter out the right action
+; with the given event
 (define (filter-action an-event actions)
   (filter
    (lambda (an-action)
      (this-action? an-event an-action))
    actions))
-(define (react-helper an-event actions)
+; after the right action has been chosen,
+; extract the result of that action
+(define (action-result an-event actions)
   (let ([result (filter-action an-event actions)])
     (if (null? result)
         null
         (action-result (car result)))))
+
+; given a name, the right state needs to be found
 (define (this-state? a-name a-state)
-  (equal? a-name
-          (state-name a-state)))
+  (equal? a-name (state-name a-state)))
+; in an automaton, there are many states,
+; filter out the right state given the name
 (define (filter-state a-name states)
   (filter
    (lambda (a-state)
      (this-state? a-name a-state))
    states))
+; an event happens, how the automaton will react?
 (define (react an-event an-auto)
   (let ([result-state (filter-state (automaton-current-state an-auto)
                                     (automaton-states an-auto))])
     (if (null? result-state)
         an-auto
-        (react-helper an-event
+        (action-result an-event
                       (state-actions
                        (car result-state))))))
+; update the current state of the old auto
 (define (update-current-state old-auto new-state)
   (struct-copy automaton old-auto [current-state new-state]))
 
