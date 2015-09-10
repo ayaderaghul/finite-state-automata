@@ -191,22 +191,28 @@
           #:break (< r (list-ref accumulated-payoff-percentage i))
           (list-ref population i))))))
 
+;; MUTATION
+
+
+
 (define population-mean '())
 ;; evolve the population over cycles
-(define (evolve population cycles speed rounds-per-match)
+;; N=100
+(define (evolve population cycles speed mutation rounds-per-match)
   (let* ([round-results (match-population population rounds-per-match)]
          [average-payoff (exact->inexact (/ (apply + (flatten round-results))
                                             (* rounds-per-match 100)))]
          [accum-fitness (accumulate (payoff-percentages (flatten round-results)))]
-         [survivors (drop population speed)]
+         [survivors (drop population (+ speed mutation))]
          [successors
           (randomise-over-fitness accum-fitness population speed)]
-         [new-population (shuffle (append survivors successors))])
+         [mutators (for/list ([m mutation]) (generate-auto))]
+         [new-population (shuffle (append survivors successors mutators))])
     (set! population-mean
           (append population-mean (list average-payoff)))
     (if (zero? cycles)
-        "done"
-        (evolve new-population (sub1 cycles) speed rounds-per-match))))
+        population
+        (evolve new-population (sub1 cycles) speed mutation rounds-per-match))))
 
 ;; TV
 (define (plot-mean data)
