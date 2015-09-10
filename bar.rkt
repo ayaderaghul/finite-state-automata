@@ -28,15 +28,8 @@
         (action-result (car result)))))
 
 ; given a name, the right state needs to be found
-(define (this-state? a-name a-state)
-  (equal? a-name (state-name a-state)))
-; in an automaton, there are many states,
-; filter out the right state given the name
-(define (filter-state a-name states)
-  (filter
-   (lambda (a-state)
-     (this-state? a-name a-state))
-   states))
+(define (filter-state a-posn states)
+  (list-ref states a-posn))
 ; an event happens, how the automaton will react?
 (define (react an-event an-auto)
   (let ([result-state (filter-state (automaton-current-state an-auto)
@@ -45,7 +38,7 @@
         an-auto
         (act an-event
              (state-actions
-              (car result-state))))))
+              result-state)))))
 ; update the state of the auto (new auto created)
 (define (update old-auto new-state)
   (set-automaton-current-state! old-auto new-state))
@@ -56,35 +49,55 @@
                                   (action 1 1)
                                   (action 2 0)))
                    (state 1 (list (action 0 2)
+                                    (action 1 1)
+                                    (action 2 0)))
+                   (state 2 (list (action 0 2)
                                   (action 1 1)
                                   (action 2 0)))
-                   (state 2 (list (action 0 2)
-                                  (action 1 1)
-                                  (action 2 0))))))
-(define all-highs
-  (automaton 2
-             (list (state 0 (list (action 0 2)
+                   (state 0 (list (action 0 2)
                                   (action 1 2)
                                   (action 2 2)))
-                   (state 1 (list (action 0 2)
-                                  (action 1 2)
-                                  (action 2 2)))
-                   (state 2 (list (action 0 2)
+                   (state 0 (list (action 0 2)
                                   (action 1 2)
                                   (action 2 2))))))
+(define all-highs
+  (automaton 2
+             (list (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   (state 2 (list (action 0 2)
+                                  (action 1 2)
+                                  (action 2 2)))
+                   )))
+
 ; generate random automaton (random current state, random result-state
 ; after each event
 (define (generate-auto)
   (automaton (random 3)
-             (list (state 0 (list (action 0 (random 3))
-                                  (action 1 (random 3))
-                                  (action 2 (random 3))))
-                   (state 1 (list (action 0 (random 3))
-                                  (action 1 (random 3))
-                                  (action 2 (random 3))))
-                   (state 2 (list (action 0 (random 3))
-                                  (action 1 (random 3))
-                                  (action 2 (random 3)))))))
+             (list (state (random 3) (list (action 0 (random 3))
+                                           (action 1 (random 3))
+                                           (action 2 (random 3))))
+                   (state (random 3) (list (action 0 (random 3))
+                                           (action 1 (random 3))
+                                           (action 2 (random 3))))
+                   (state (random 3) (list (action 0 (random 3))
+                                           (action 1 (random 3))
+                                           (action 2 (random 3))))
+                   (state (random 3) (list (action 0 (random 3))
+                                           (action 1 (random 3))
+                                           (action 2 (random 3))))
+                   (state (random 3) (list (action 0 (random 3))
+                                           (action 1 (random 3))
+                                           (action 2 (random 3)))))))
 
 (define (match-claims claims)
   (if (<= (apply + claims) 2)
@@ -109,13 +122,20 @@
                      (list reaction1 reaction2)
                      (sub1 countdown)))))
 
+;; current claim
+(define (current-claim an-auto)
+  (state-name
+   (list-ref (automaton-states an-auto)
+             (automaton-current-state an-auto))))
+
+
 ;; match a pair of automaton for n rounds
 ;; return a list of round results
 (define (match-pair automaton-pair rounds-per-match)
   (match-pair* (car automaton-pair)
                (last automaton-pair)
                '()
-               (map automaton-current-state automaton-pair)
+               (map current-claim automaton-pair)
                rounds-per-match))
 
 ;; generate population
@@ -170,9 +190,12 @@
 
 (define (payoff-percentages payoff-list)
   (let ([s (apply + payoff-list)])
-    (for/list ([i (length payoff-list)])
-      (/ (list-ref payoff-list i)
-         s))))
+    (if (zero? s)
+        (for/list ([i (length payoff-list)])
+          (/ 1 (length payoff-list)))
+        (for/list ([i (length payoff-list)])
+          (/ (list-ref payoff-list i)
+             s)))))
 
 (define (accumulated-fitness population rounds-per-match)
   (accumulate
@@ -192,9 +215,58 @@
           (list-ref population i))))))
 
 ;; MUTATION
+(define (mutate an-auto)
+  (let ([r (random 21)])
+    (cond
+     [(< r 5) (set-state-name!
+               (list-ref
+                (automaton-states an-auto)
+                r)
+               (random 3))]
+     [(< r 10) (set-action-result!
+                (first
+                 (state-actions
+                  (list-ref
+                   (automaton-states an-auto)
+                   (- r 5))))
+                (random 3))]
+     [(< r 15) (set-action-result!
+                (second
+                 (state-actions
+                  (list-ref
+                   (automaton-states an-auto)
+                   (- r 10))))
+                (random 3))]
+     [(< r 20) (set-action-result!
+                (third
+                 (state-actions
+                  (list-ref
+                   (automaton-states an-auto)
+                   (- r 15))))
+                (random 3))]
+     [(= r 21) (set-automaton-current-state!
+                an-auto (random 3))])))
 
-
-
+#|
+  (let ([r (random 3)])
+    (cond [(= r 0) (set-automaton-current-state! an-auto (random 3))]
+          [(= r 1) (let ([r2 (random 5)])
+                     (set-state-name!
+                      (list-ref
+                       (automaton-states an-auto)
+                       r2)
+                      (random 3)))]
+          [(= r 2) (let ([r3 (random 5)]
+                         [r4 (random 3)])
+                     (set-action-result!
+                      (list-ref
+                       (state-actions
+                        (list-ref
+                         (automaton-states an-auto)
+                         r3))
+                       r4)
+                      (random 3)))])))
+|#
 (define population-mean '())
 ;; evolve the population over cycles
 ;; N=100
@@ -203,11 +275,15 @@
          [average-payoff (exact->inexact (/ (apply + (flatten round-results))
                                             (* rounds-per-match 100)))]
          [accum-fitness (accumulate (payoff-percentages (flatten round-results)))]
-         [survivors (drop population (+ speed mutation))]
+         [survivors (drop population speed)]
          [successors
           (randomise-over-fitness accum-fitness population speed)]
-         [mutators (for/list ([m mutation]) (generate-auto))]
-         [new-population (shuffle (append survivors successors mutators))])
+         [new-population
+          (shuffle (append survivors successors))]
+         [mutators
+          (for/list ([m mutation])
+            (mutate (list-ref new-population m)))]
+         )
     (set! population-mean
           (append population-mean (list average-payoff)))
     (if (zero? cycles)
