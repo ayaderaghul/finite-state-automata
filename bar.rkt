@@ -267,6 +267,28 @@
                        r4)
                       (random 3)))])))
 |#
+
+;; SCAN
+
+(define (scan-init population)
+  (foldl
+   (lambda (au h)
+     (hash-update h
+                  (state-name (list-ref
+                               (automaton-states au)
+                               (automaton-current-state au)))
+                  add1 0))
+   (hash)
+   population))
+
+(define (scan population)
+  (foldl
+   (lambda (au h)
+     (hash-update h au add1 0))
+   (hash)
+   population))
+
+
 (define population-mean '())
 ;; evolve the population over cycles
 ;; N=100
@@ -281,7 +303,7 @@
          [new-population
           (shuffle (append survivors successors))]
          [mutators
-          (for/list ([m mutation])
+          (for ([m mutation])
             (mutate (list-ref new-population m)))]
          )
     (set! population-mean
